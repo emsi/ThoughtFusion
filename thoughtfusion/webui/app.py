@@ -1,15 +1,23 @@
+import openai
 import streamlit as st
 from openai.error import AuthenticationError
 
 from thoughtfusion.webui.config import sidebar
+from thoughtfusion.webui.prompts import get_critic_prompt, get_system_prompt_messages
 
 
 def app():
     """Main Streamlit app"""
-    st.set_page_config(page_title="ThoughtFusion", page_icon="🤖", layout="wide")
+    st.set_page_config(
+        page_title="ThoughtFusion", page_icon="🤖", layout="wide", initial_sidebar_state="collapsed"
+    )
 
     st.title("ThoughtFusion")
-    st.markdown("")
+    st.markdown(
+        "ThoughtFusion uses two agents talking approach to answer your question. It's"
+        " inspired by [Language Models can Solve Computer Tasks]"
+        "(https://arxiv.org/abs/2303.17491) paper and similar works."
+    )
 
     try:
         sidebar()
@@ -17,16 +25,112 @@ def app():
         st.error("Invalid OpenAI API Key")
         return
 
-    user_question = st.text_input("Enter your question")
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "critic_messages" not in st.session_state:
+        st.session_state.critic_messages = []
 
     left, right = st.columns([0.5, 0.5])
+    display_messages_history(left, st.session_state.messages)
+    display_messages_history(right, st.session_state.critic_messages, critic=True)
 
-    with left.chat_message("assistant"):
-        st.write("OO")
+    if "first_question" not in st.session_state:
+        st.session_state.first_question = True
 
-    with right.chat_message("ai"):
-        st.write("OO")
+    if question := st.chat_input("Enter your question"):
+        if st.session_state.first_question:
+            if st.session_state.identify_personas:
+                ai_persona, critic_persona = get_personas(
+                    left, right, get_system_prompt_messages(question)
+                )
+                st.session_state.messages.append(
+                    {"role": "system", "content": f"""You are {ai_persona}."""}
+                )
+                st.session_state.critic_messages.append(
+                    {
+                        "role": "system",
+                        "content": f"""You are {critic_persona}. Your are tasked with analyzing answers and reviewing them, finding any potential problems or issues.""",
+                    }
+                )
 
+            st.session_state.first_question = False
+
+        for i in range(st.session_state.iterations):
+            response = discuss(
+                left,
+                question,
+                st.session_state.messages,
+            )
+            if i == 0:
+                response = get_critic_prompt(question, response)
+            question = discuss(right, response, st.session_state.critic_messages, ai_avatar="🧠")
+            if "ALL GOOD" in question:
+                break
+
+
+def display_messages_history(column, messages, critic=False):
+    """Display messages in a column"""
+    # Display chat messages from history on app rerun
+    for message in messages:
+        avatar = None
+        if critic:
+            if message["role"] == "user":
+                avatar = "🤖"
+            else:
+                avatar = "🧠"
+        if message["role"] == "system":
+            avatar = "⚙️"
+        with column.chat_message(message["role"], avatar=avatar):
+            st.markdown(message["content"])
+
+
+def discuss(column, message, messages_history, *, avatar=None, ai_avatar=None):
+    """Discuss with a chat"""
+    with column.chat_message("user", avatar=avatar):
+        st.markdown(message)
+
+    messages_history.append({"role": "user", "content": message})
+
+    with column.chat_message("assistant", avatar=ai_avatar):
+        message_placeholder = st.empty()
+        full_response = ""
+        for response in openai.ChatCompletion.create(
+            model=st.session_state["openai_model"],
+            messages=messages_history,
+            stream=True,
+        ):
+            full_response += response.choices[0].delta.get("content", "")
+            message_placeholder.markdown(full_response + "▌")
+        message_placeholder.markdown(full_response)
+
+    messages_history.append({"role": "assistant", "content": full_response})
+    return full_response
+
+
+def get_personas(left, right, messages):
+    """Get personas for system message"""
+    left = left.chat_message("system", avatar="🤖")
+    right = right.chat_message("system", avatar="🤖")
+
+    placeholder = left.empty()
+    full_response = ai_persona = ""
+    for response in openai.ChatCompletion.create(
+        model=st.session_state["openai_model"],
+        messages=messages,
+        stream=True,
+    ):
+        token = response.choices[0].delta.get("content", "")
+        full_response += token
+        placeholder.markdown(full_response + "▌")
+        if token.endswith("\n"):
+            placeholder.markdown(full_response)
+            ai_persona = full_response
+            placeholder = right.empty()
+            full_response = ""
+    placeholder.markdown(full_response)
+
+    return ai_persona, full_response
 
 
 if __name__ == "__main__":
