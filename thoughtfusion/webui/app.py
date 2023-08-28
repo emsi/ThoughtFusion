@@ -68,6 +68,7 @@ def app():
                 left,
                 question,
                 st.session_state.messages,
+                avatar="🧠" if i != 0 else None,
             )
             if i == 0:
                 response = partial(get_reasoning_questions, question, response)
@@ -114,8 +115,8 @@ def discuss(column, message, messages_history, *, avatar=None, ai_avatar=None):
 
 def get_personas(left, right, messages):
     """Get personas for system message"""
-    left = left.chat_message("system", avatar="🤖")
-    right = right.chat_message("system", avatar="🤖")
+    left = left.chat_message("system", avatar="⚙️")
+    right = right.chat_message("system", avatar="⚙️")
 
     placeholder = left.empty()
     full_response = ai_persona = ""
