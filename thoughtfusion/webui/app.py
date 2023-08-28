@@ -1,9 +1,16 @@
+from functools import partial
+
 import openai
 import streamlit as st
 from openai.error import AuthenticationError
 
+from thoughtfusion.webui.chat import stream_chat
 from thoughtfusion.webui.config import sidebar
-from thoughtfusion.webui.prompts import get_critic_prompt, get_system_prompt_messages
+from thoughtfusion.webui.prompts import (
+    get_critic_prompt,
+    get_system_prompt_messages,
+    get_reasoning_questions_prompt,
+)
 
 
 def app():
@@ -63,8 +70,10 @@ def app():
                 st.session_state.messages,
             )
             if i == 0:
-                response = get_critic_prompt(question, response)
-            question = discuss(right, response, st.session_state.critic_messages, ai_avatar="🧠")
+                response = partial(get_reasoning_questions, question, response)
+            question = discuss(
+                right, response, st.session_state.critic_messages, avatar="🤖", ai_avatar="🧠"
+            )
             if "ALL GOOD" in question:
                 break
 
@@ -88,21 +97,16 @@ def display_messages_history(column, messages, critic=False):
 def discuss(column, message, messages_history, *, avatar=None, ai_avatar=None):
     """Discuss with a chat"""
     with column.chat_message("user", avatar=avatar):
-        st.markdown(message)
+        # if message is callable
+        if callable(message):
+            message = message()
+        else:
+            st.markdown(message)
 
     messages_history.append({"role": "user", "content": message})
 
     with column.chat_message("assistant", avatar=ai_avatar):
-        message_placeholder = st.empty()
-        full_response = ""
-        for response in openai.ChatCompletion.create(
-            model=st.session_state["openai_model"],
-            messages=messages_history,
-            stream=True,
-        ):
-            full_response += response.choices[0].delta.get("content", "")
-            message_placeholder.markdown(full_response + "▌")
-        message_placeholder.markdown(full_response)
+        full_response = stream_chat(messages_history)
 
     messages_history.append({"role": "assistant", "content": full_response})
     return full_response
@@ -131,6 +135,18 @@ def get_personas(left, right, messages):
     placeholder.markdown(full_response)
 
     return ai_persona, full_response
+
+
+def get_reasoning_questions(question, response):
+    """Get reasoning questions"""
+    critic_prompt_part1, critic_prompt_part2 = get_critic_prompt(
+        question=question, response=response
+    )
+    st.markdown(critic_prompt_part1)
+
+    reasoning_questions = stream_chat(get_reasoning_questions_prompt(question))
+    st.markdown(critic_prompt_part2)
+    return f"{critic_prompt_part1}{reasoning_questions}{critic_prompt_part2}"
 
 
 if __name__ == "__main__":
