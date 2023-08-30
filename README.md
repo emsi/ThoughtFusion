@@ -10,3 +10,5 @@ python3 -m venv venv
 pip install -r requirements.txt
 PYTHONPATH=. streamlit run thoughtfusion/webui/app.py --browser.gatherUsageStats false
 ```
+
+![Screenshot](./assets/ThoughtFusion.jpg)
