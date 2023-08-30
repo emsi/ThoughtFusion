@@ -8,7 +8,7 @@ def get_critic_prompt(*, question, response):
         "Please review provided answer and find any potential problems or issues.\n"
     ), (
         # f"{reasoning_questions}\n\n"
-        "\n\nIf you think that the answer is correct, please answer with 'ALL GOOD' (without quotes)."
+        "\n\nOnly if you think that the answer is correct, use the keyword 'ALL GOOD'."
     )
 
 

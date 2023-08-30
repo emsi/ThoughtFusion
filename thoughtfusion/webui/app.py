@@ -72,6 +72,8 @@ def app():
             )
             if i == 0:
                 response = partial(get_reasoning_questions, question, response)
+            else:
+                response = f"{response} \n\nOnly if you think that the answer is correct, use the keyword 'ALL GOOD'."
             question = discuss(
                 right, response, st.session_state.critic_messages, avatar="🤖", ai_avatar="🧠"
             )
