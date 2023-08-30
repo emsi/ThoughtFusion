@@ -1,6 +1,6 @@
 services:
   paratest:
-    image: parasoft/paratest:latest
+    image: emsi/tougtfusion:latest
     build:
       context: .
       dockerfile: Dockerfile
